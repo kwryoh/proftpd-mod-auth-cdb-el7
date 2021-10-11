@@ -56,6 +56,7 @@ Source10:		http://www.castaglia.org/proftpd/modules/proftpd-mod-vroot-0.9.2.tar.
 # (they are disabled by default); it is not included as part of the built package and should therefore
 # not fall foul of the rules against library bundling
 Source13:		http://search.cpan.org/CPAN/authors/id/C/CL/CLEMBURG/Test-Unit-0.14.tar.gz
+Source20:		http://www.castaglia.org/proftpd/modules/proftpd-mod-auth-cdb-0.9.1.tar.gz
 Patch0:			https://github.com/proftpd/proftpd/commit/d800ece1.patch
 Patch1:			proftpd-1.3.5e-shellbang.patch
 Patch2:			proftpd.conf-no-memcached.patch
@@ -191,6 +192,14 @@ Requires:	%{name} = %{version}-%{release}
 %description sqlite
 Module to add SQLite support to the ProFTPD FTP server.
 
+%package auth-cdb
+Summary:	Module to add Auth CDB support to the ProFTPD FTP server
+URL:			http://www.castaglia.org/proftpd/modules/mod_auth_cdb.html
+Requires:	%{name} = %{version}-%{release}
+
+%description auth-cdb
+Module to add Auth CDB support to the ProFTPD FTP server.
+
 %package utils
 Summary:	ProFTPD - Additional utilities
 Requires:	%{name} = %{version}-%{release}
@@ -211,7 +220,7 @@ ProFTPD server:
 * ftpwho: show the current process information for each FTP session
 
 %prep
-%setup -q -n %{name}-%{version}%{?prever} -a 10 -a 13
+%setup -q -n %{name}-%{version}%{?prever} -a 10 -a 13 -a 20
 
 # Copy mod_vroot source, documentation and tests into place
 cp -p mod_vroot/mod_vroot.c contrib/
@@ -219,6 +228,9 @@ cp -p mod_vroot/mod_vroot.html doc/contrib/
 cp -p mod_vroot/t/lib/ProFTPD/Tests/Modules/mod_vroot.pm \
 	tests/t/lib/ProFTPD/Tests/Modules/
 cp -p mod_vroot/t/modules/mod_vroot.t tests/t/modules/
+
+# Copy mod_auth_cdb source into place
+cp -p mod_auth_cdb/mod_auth_cdb.c contrib/
 
 # Copy default config file into place
 cp -p %{SOURCE1} proftpd.conf
@@ -323,7 +335,7 @@ chmod -c -x include/tpl.h lib/tpl.c
 # Modules to be built as DSO's (excluding mod_ifsession, always specified last)
 SMOD1=mod_sql:mod_sql_passwd:mod_sql_mysql:mod_sql_postgres:mod_sql_sqlite
 SMOD2=mod_quotatab:mod_quotatab_file:mod_quotatab_ldap:mod_quotatab_radius:mod_quotatab_sql
-SMOD3=mod_ldap:mod_ban:mod_wrap:mod_ctrls_admin:mod_facl:mod_load:mod_vroot
+SMOD3=mod_ldap:mod_ban:mod_wrap:mod_ctrls_admin:mod_facl:mod_load:mod_vroot:mod_auth_cdb
 SMOD4=mod_radius:mod_ratio:mod_rewrite:mod_site_misc:mod_exec:mod_shaper:mod_geoip
 SMOD5=mod_wrap2:mod_wrap2_file:mod_wrap2_sql:mod_copy:mod_deflate:mod_ifversion:mod_qos
 SMOD6=mod_sftp:mod_sftp_pam:mod_sftp_sql:mod_tls_shmcache%{?have_libmemcached::mod_tls_memcache}
@@ -344,7 +356,7 @@ SMOD6=mod_sftp:mod_sftp_pam:mod_sftp_sql:mod_tls_shmcache%{?have_libmemcached::m
 			--enable-tests \
 			--with-libraries="%{_libdir}/mysql" \
 			--with-includes="%{_includedir}/mysql" \
-			--with-modules=mod_readme:mod_auth_pam:mod_tls \
+			--with-modules=mod_readme:mod_auth_pam:mod_tls:mod_auth_cdb \
 			--with-shared=${SMOD1}:${SMOD2}:${SMOD3}:${SMOD4}:${SMOD5}:${SMOD6}:mod_ifsession
 
 make %{?_smp_mflags}
@@ -375,9 +387,9 @@ touch %{buildroot}%{_sysconfdir}/ftpusers
 
 # Make sure %%{rundir}/proftpd exists at boot time for systems where it's on tmpfs (#656675)
 %if 0%{?rundir_tmpfs:1}
-install -d -m 755 %{buildroot}%{_prefix}/lib/tmpfiles.d
+install -d -m 755 %{buildroot}%{_tmpfilesdir}
 install -p -m 644 contrib/dist/rpm/proftpd-tmpfs.conf \
-					%{buildroot}%{_prefix}/lib/tmpfiles.d/proftpd.conf
+					%{buildroot}%{_tmpfilesdir}/proftpd.conf
 %endif
 
 # Find translations
@@ -485,7 +497,7 @@ fi
 %{_sysconfdir}/rc.d/init.d/proftpd
 %endif
 %if 0%{?rundir_tmpfs:1}
-%{_prefix}/lib/tmpfiles.d/proftpd.conf
+%{_tmpfilesdir}/proftpd.conf
 %endif
 %{_bindir}/ftpdctl
 %{_sbindir}/ftpscrub
@@ -554,6 +566,9 @@ fi
 
 %files sqlite
 %{_libexecdir}/proftpd/mod_sql_sqlite.so
+
+%files auth-cdb
+%{_libexecdir}/proftpd/mod_auth_cdb.so
 
 %files utils
 %doc contrib/xferstats.holger-preiss
@@ -1509,4 +1524,3 @@ fi
 
 * Sat Jul 24 1999 MacGyver <macgyver@tos.net>
 - Initial import of spec.
-

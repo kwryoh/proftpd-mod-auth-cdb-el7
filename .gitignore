@@ -4,3 +4,8 @@
 *.log
 *.swp
 *~
+
+BUILD/
+BUILDROOT/
+RPMS/
+SRPMS/
