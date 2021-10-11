@@ -1,0 +1,31 @@
+From 459693c70c83b7d173ec10bb8089d4ce4e59d301 Mon Sep 17 00:00:00 2001
+From: TJ Saunders <tj@castaglia.org>
+Date: Tue, 2 May 2017 19:56:39 -0700
+Subject: [PATCH] Bug#4306: AllowChrootSymlinks off could cause login failures
+ depending on filesystem permissions.
+
+Use the IDs of the logging-in user to perform the directory walk, looking
+for symlinks, to be more consistent with similar checks done during login.
+---
+ modules/mod_auth.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/modules/mod_auth.c b/modules/mod_auth.c
+index d93c630..2b76070 100644
+--- a/modules/mod_auth.c
++++ b/modules/mod_auth.c
+@@ -936,9 +936,13 @@ static int get_default_root(pool *p, int allow_symlinks, const char **root) {
+           path[pathlen-1] = '\0';
+         }
+ 
++        PRIVS_USER
+         res = is_symlink_path(p, path, pathlen);
++        xerrno = errno;
++        PRIVS_RELINQUISH
++
+         if (res < 0) {
+-          if (errno == EPERM) {
++          if (xerrno == EPERM) {
+             pr_log_pri(PR_LOG_WARNING, "error: DefaultRoot %s is a symlink "
+               "(denied by AllowChrootSymlinks config)", path);
+           }

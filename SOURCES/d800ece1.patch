@@ -1,0 +1,35 @@
+From d800ece16bd2d1f8f5e2d1cb98b59877b3487b10 Mon Sep 17 00:00:00 2001
+From: TJ Saunders <tj@castaglia.org>
+Date: Wed, 28 Oct 2015 18:22:42 -0700
+Subject: [PATCH] Attempt to Bug#4206 by speculatively fixing possible causes. 
+ First, reset a static string (allocated out of a pool which is cleared on
+ restart) to its default.  Next, remove some (useless) #ifdefs which, if
+ mod_lang is built as a DSO/shared module, could cause problems on module
+ loading IFF the system does not have the expected header.
+
+---
+ modules/mod_lang.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/modules/mod_lang.c b/modules/mod_lang.c
+index 8e08f44..0170be7 100644
+--- a/modules/mod_lang.c
++++ b/modules/mod_lang.c
+@@ -716,9 +716,7 @@ static void lang_postparse_ev(const void *event_data, void *user_data) {
+   config_rec *c;
+   DIR *dirh;
+   server_rec *s;
+-#ifdef HAVE_LIBINTL_H
+   const char *locale_path = NULL;
+-#endif
+ 
+   c = find_config(main_server->conf, CONF_PARAM, "LangEngine", FALSE);
+   if (c) {
+@@ -888,6 +886,7 @@ static void lang_postparse_ev(const void *event_data, void *user_data) {
+ 
+ static void lang_restart_ev(const void *event_data, void *user_data) {
+   destroy_pool(lang_pool);
++  lang_curr = LANG_DEFAULT_LANG;
+   lang_list = NULL;
+   lang_aliases = NULL;
+ 

@@ -1,0 +1,34 @@
+Fix null pointer dereference for invalid SCP command by passing the correct argument count to getopt(3).
+
+This is a backport of https://github.com/proftpd/proftpd/pull/1044
+to fix issue https://github.com/proftpd/proftpd/issues/1043
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1878869
+
+--- contrib/mod_sftp/scp.c
++++ contrib/mod_sftp/scp.c
+@@ -2307,7 +2307,6 @@ int sftp_scp_set_params(pool *p, uint32_
+   pr_getopt_reset();
+ 
+   reqargv = (char **) req->elts;
+-
+   for (i = 0; i < req->nelts; i++) {
+     if (reqargv[i]) {
+       pr_trace_msg(trace_channel, 5, "reqargv[%u] = '%s'", i, reqargv[i]);
+@@ -2323,7 +2322,7 @@ int sftp_scp_set_params(pool *p, uint32_
+   scp_pool = make_sub_pool(sftp_pool);
+   pr_pool_tag(scp_pool, "SSH2 SCP Pool");
+ 
+-  while ((optc = getopt(req->nelts, reqargv, opts)) != -1) {
++  while ((optc = getopt(req->nelts-1, reqargv, opts)) != -1) {
+     switch (optc) {
+       case 'd':
+         scp_opts |= SFTP_SCP_OPT_DIR;
+@@ -2357,6 +2356,7 @@ int sftp_scp_set_params(pool *p, uint32_
+   if (reqargv[optind] == NULL) {
+     (void) pr_log_writefile(sftp_logfd, MOD_SFTP_VERSION,
+       "'scp' request provided no paths, ignoring");
++    errno = EINVAL;
+     return -1;
+   }
+ 

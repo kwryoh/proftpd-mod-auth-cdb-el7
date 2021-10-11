@@ -1,0 +1,40 @@
+Backported from https://github.com/proftpd/proftpd/commit/51b9f9bb6c6dd8ea
+
+--- src/main.c
++++ src/main.c
+@@ -481,6 +481,7 @@ int pr_cmd_read(cmd_rec **res) {
+   static char *cmd_buf = NULL;
+   char *cp;
+   size_t cmd_buflen;
++  unsigned int too_large_count = 0;
+ 
+   if (res == NULL) {
+     errno = EINVAL;
+@@ -505,8 +506,16 @@ int pr_cmd_read(cmd_rec **res) {
+ 
+       if (errno == E2BIG) {
+         /* The client sent a too-long command which was ignored; give
+-         * them another chance?
++         * them a few more chances, with minor delays?
+          */
++
++        too_large_count++;
++        pr_timer_usleep(250 * 1000);
++
++        if (too_large_count > 3) {
++          return -1;
++        }
++
+         continue;
+       }
+ 
+--- src/netio.c
++++ src/netio.c
+@@ -1037,6 +1037,7 @@ int pr_netio_read(pr_netio_stream_t *nst
+       }
+ 
+       nstrm->strm_errno = 0;
++      errno = EOF;
+       break;
+     }
+ 

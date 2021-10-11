@@ -1,0 +1,277 @@
+--- contrib/mod_sftp/keys.c
++++ contrib/mod_sftp/keys.c
+@@ -766,15 +766,23 @@ static int pkey_cb(char *buf, int buflen
+   return 0;
+ }
+ 
+-static int has_req_perms(int fd) {
++static int has_req_perms(int fd, const char *path) {
+   struct stat st;
+ 
+-  if (fstat(fd, &st) < 0)
++  if (fstat(fd, &st) < 0) {
+     return -1;
++  }
+ 
+   if (st.st_mode & (S_IRWXG|S_IRWXO)) {
+-    errno = EACCES;
+-    return -1;
++    if (!(sftp_opts & SFTP_OPT_INSECURE_HOSTKEY_PERMS)) {
++      errno = EACCES;
++      return -1;
++    }
++
++    pr_log_pri(PR_LOG_INFO, MOD_SFTP_VERSION
++      "notice: the permissions on SFTPHostKey '%s' (%04o) allow "
++      "group-readable and/or world-readable access, increasing chances of "
++      "system users reading the private key", path, st.st_mode);
+   }
+ 
+   return 0;
+@@ -2014,7 +2022,7 @@ static int load_file_hostkey(pool *p, co
+     return -1;
+   }
+ 
+-  if (has_req_perms(fd) < 0) {
++  if (has_req_perms(fd, path) < 0) {
+     if (errno == EACCES) {
+       (void) pr_log_writefile(sftp_logfd, MOD_SFTP_VERSION,
+         "'%s' is accessible by group or world, which is not allowed", path);
+--- contrib/mod_sftp/mod_sftp.c
++++ contrib/mod_sftp/mod_sftp.c
+@@ -1076,8 +1076,31 @@ MODRET set_sftphostkey(cmd_rec *cmd) {
+ 
+     if ((st.st_mode & S_IRWXG) ||
+         (st.st_mode & S_IRWXO)) {
+-      CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "unable to use '", cmd->argv[1],
+-        "' as host key, as it is group- or world-accessible", NULL));
++      int insecure_hostkey_perms = FALSE;
++      config_rec *c;
++
++      /* Check for the InsecureHostKeyPerms SFTPOption. */
++      c = find_config(cmd->server->conf, CONF_PARAM, "SFTPOptions", FALSE);
++      while (c != NULL) {
++        unsigned long opts;
++
++        pr_signals_handle();
++
++        opts = *((unsigned long *) c->argv[0]);
++        if (opts & SFTP_OPT_INSECURE_HOSTKEY_PERMS) {
++          insecure_hostkey_perms = TRUE;
++          break;
++        }
++      }
++
++      if (insecure_hostkey_perms) {
++        pr_log_pri(PR_LOG_NOTICE, MOD_SFTP_VERSION ": unable to use '%s' "
++          "as host key, as it is group- or world-accessible", cmd->argv[1]);
++
++      } else {
++        CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "unable to use '", cmd->argv[1],
++          "' as host key, as it is group- or world-accessible", NULL));
++      }
+     }
+   }
+ 
+@@ -1235,6 +1258,9 @@ MODRET set_sftpoptions(cmd_rec *cmd) {
+     } else if (strcmp(cmd->argv[1], "AllowInsecureLogin") == 0) {
+       opts |= SFTP_OPT_ALLOW_INSECURE_LOGIN;
+ 
++    } else if (strcmp(cmd->argv[1], "InsecureHostKeyPerms") == 0) {
++      opts |= SFTP_OPT_INSECURE_HOSTKEY_PERMS;
++
+     } else {
+       CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, ": unknown SFTPOption '",
+         cmd->argv[i], "'", NULL));
+@@ -1747,6 +1773,18 @@ static int sftp_sess_init(void) {
+   sftp_pool = make_sub_pool(session.pool);
+   pr_pool_tag(sftp_pool, MOD_SFTP_VERSION);
+ 
++  c = find_config(main_server->conf, CONF_PARAM, "SFTPOptions", FALSE);
++  while (c != NULL) {
++    unsigned long opts;
++
++    pr_signals_handle();
++
++    opts = *((unsigned long *) c->argv[0]);
++    sftp_opts |= opts;
++
++    c = find_config_next(c, c->next, CONF_PARAM, "SFTPOptions", FALSE);
++  }
++
+   c = find_config(main_server->conf, CONF_PARAM, "SFTPHostKey", FALSE);
+   while (c) {
+     const char *path = c->argv[0];
+@@ -1791,18 +1829,6 @@ static int sftp_sess_init(void) {
+     sftp_channel_set_max_count(*((unsigned int *) c->argv[0]));
+   }
+ 
+-  c = find_config(main_server->conf, CONF_PARAM, "SFTPOptions", FALSE);
+-  while (c != NULL) {
+-    unsigned long opts;
+-
+-    pr_signals_handle();
+-
+-    opts = *((unsigned long *) c->argv[0]);
+-    sftp_opts |= opts;
+-
+-    c = find_config_next(c, c->next, CONF_PARAM, "SFTPOptions", FALSE);
+-  }
+-
+   c = find_config(main_server->conf, CONF_PARAM, "DisplayLogin", FALSE);
+   if (c) {
+     const char *path;
+--- contrib/mod_sftp/mod_sftp.h.in
++++ contrib/mod_sftp/mod_sftp.h.in
+@@ -105,6 +105,7 @@
+ #define SFTP_OPT_IGNORE_SFTP_SET_OWNERS		0x0080
+ #define SFTP_OPT_IGNORE_SCP_UPLOAD_TIMES	0x0100
+ #define SFTP_OPT_ALLOW_INSECURE_LOGIN		0x0200
++#define SFTP_OPT_INSECURE_HOSTKEY_PERMS		0x0400
+ 
+ /* mod_sftp service flags */
+ #define SFTP_SERVICE_FL_SFTP		0x0001
+--- doc/contrib/mod_sftp.html
++++ doc/contrib/mod_sftp.html
+@@ -929,6 +929,14 @@ The currently implemented options are:
+     permissions sent by the SFTP client, use this option.
+ 
+   <p>
++  <li><code>InsecureHostKeyPerms</code><br>
++    <p>
++    When this option is used, <code>mod_sftp</code> will ignore insecure
++    permissions (<i>i.e.</i> group- or world-readable) on
++    <code>SFTPHostKey</code> files.
++  </li>
++
++  <p>
+   <li><code>MatchKeySubject</code><br>
+     <p>
+     When this option is used, if public key authentication is used, the
+--- tests/t/lib/ProFTPD/Tests/Modules/mod_sftp.pm
++++ tests/t/lib/ProFTPD/Tests/Modules/mod_sftp.pm
+@@ -993,6 +993,11 @@ my $TESTS = {
+     test_class => [qw(bug forking sftp ssh2)],
+   },
+ 
++  sftp_config_insecure_hostkey_perms_bug4098 => {
++    order => ++$order,
++    test_class => [qw(bug forking sftp ssh2)],
++  },
++
+   sftp_multi_channels => {
+     order => ++$order,
+     test_class => [qw(forking sftp ssh2)],
+@@ -33901,6 +33906,61 @@ sub sftp_multi_channels {
+   unlink($log_file);
+ }
+ 
++sub sftp_config_insecure_hostkey_perms_bug4098 {
++  my $self = shift;
++  my $tmpdir = $self->{tmpdir};
++  my $setup = test_setup($tmpdir, 'sftp');
++
++  my $rsa_host_key = File::Spec->rel2abs('t/etc/modules/mod_sftp/ssh_host_rsa_key');
++  my $dsa_host_key = File::Spec->rel2abs('t/etc/modules/mod_sftp/ssh_host_dsa_key');
++
++  # Deliberately set insecure perms on the hostkeys
++  unless (chmod(0444, $rsa_host_key, $dsa_host_key)) {
++    die("Can't set perms on $rsa_host_key, $dsa_host_key: $!");
++  }
++
++  my $config = {
++    PidFile => $setup->{pid_file},
++    ScoreboardFile => $setup->{scoreboard_file},
++    SystemLog => $setup->{log_file},
++    TraceLog => $setup->{log_file},
++    Trace => 'DEFAULT:10 ssh2:20 sftp:20 scp:20',
++
++    AuthUserFile => $setup->{auth_user_file},
++    AuthGroupFile => $setup->{auth_group_file},
++
++    IfModules => {
++      'mod_delay.c' => {
++        DelayEngine => 'off',
++      },
++
++      'mod_sftp.c' => [
++        "SFTPEngine on",
++        "SFTPLog $setup->{log_file}",
++        "SFTPOptions InsecureHostKeyPerms",
++        "SFTPHostKey $rsa_host_key",
++        "SFTPHostKey $dsa_host_key",
++      ],
++    },
++  };
++
++  my ($port, $config_user, $config_group) = config_write($setup->{config_file},
++    $config);
++
++  my $ex;
++
++  # First, start the server.
++  eval { server_start($setup->{config_file}, $setup->{pid_file}) };
++  if ($@) {
++    $ex = "Server failed to start up with world-readable SFTPHostKey";
++
++  } else {
++    server_stop($setup->{pid_file});
++  }
++
++  test_cleanup($setup->{log_file}, $ex);
++}
++
+ sub sftp_multi_channel_downloads {
+   my $self = shift;
+   my $tmpdir = $self->{tmpdir};
+--- tests/t/lib/ProFTPD/TestSuite/Utils.pm
++++ tests/t/lib/ProFTPD/TestSuite/Utils.pm
+@@ -857,7 +857,7 @@ sub server_restart {
+     close($fh);
+ 
+   } else {
+-    die("Can't read $pid_file: $!");
++    croak("Can't read $pid_file: $!");
+   }
+ 
+   my $cmd = "kill -HUP $pid";
+@@ -1047,11 +1047,7 @@ sub test_append_logfile {
+   my $out_file = File::Spec->rel2abs('tests.log');
+ 
+   unless (open($outfh, ">> $out_file")) {
+-    die("Can't append to $out_file: $!");
+-  }
+-
+-  unless (open($infh, "< $log_file")) {
+-    die("Can't read $log_file: $!");
++    croak("Can't append to $out_file: $!");
+   }
+ 
+   my ($pkg, $filename, $lineno, $func) = (caller(1))[0, 1, 2, 3];
+@@ -1061,8 +1057,12 @@ sub test_append_logfile {
+ 
+   print $outfh "-----BEGIN $func-----\n";
+ 
+-  while (my $line = <$infh>) {
+-    print $outfh $line;
++  if (open($infh, "+< $log_file")) {
++    while (my $line = <$infh>) {
++      print $outfh $line;
++    }
++
++    close($infh);
+   }
+ 
+   # If an exception was provided, write that out to the log file, too.
+@@ -1072,10 +1072,8 @@ sub test_append_logfile {
+ 
+   print $outfh "-----END $func-----\n";
+ 
+-  close($infh);
+-
+   unless (close($outfh)) {
+-    die("Can't write $out_file: $!");
++    croak("Can't write $out_file: $!");
+   }
+ }
+ 

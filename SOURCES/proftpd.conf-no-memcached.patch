@@ -1,0 +1,13 @@
+--- proftpd.conf	2011-04-05 11:59:10.491108239 +0100
++++ proftpd.conf	2010-12-23 15:19:13.667374844 +0000
+@@ -167,10 +167,6 @@
+ # (contrib/mod_tls_shmcache.html)
+ #   LoadModule mod_tls_shmcache.c
+ #
+-# Provide a memcached-based implementation of an external SSL session cache
+-# (contrib/mod_tls_memcache.html)
+-#   LoadModule mod_tls_memcache.c
+-#
+ # Use the /etc/hosts.allow and /etc/hosts.deny files, or other allow/deny
+ # files, for IP-based access control
+ # (http://www.proftpd.org/docs/contrib/mod_wrap.html)

@@ -1,0 +1,171 @@
+--- src/data.c
++++ src/data.c
+@@ -747,7 +747,7 @@ void pr_data_close(int quiet) {
+  */
+ void pr_data_cleanup(void) {
+   /* sanity check */
+-  if (session.d) {
++  if (session.d != NULL) {
+     pr_inet_lingering_close(session.pool, session.d, timeout_linger);
+     session.d = NULL;
+   }
+@@ -769,7 +769,7 @@ void pr_data_abort(int err, int quiet) {
+   int true_abort = XFER_ABORTED;
+   nstrm = NULL;
+ 
+-  if (session.d) {
++  if (session.d != NULL) {
+     if (true_abort == FALSE) {
+       pr_inet_lingering_close(session.pool, session.d, timeout_linger);
+ 
+@@ -951,6 +951,11 @@ void pr_data_abort(int err, int quiet) {
+     if (true_abort == FALSE) {
+       pr_response_add_err(respcode, _("Transfer aborted. %s"), msg ? msg : "");
+     }
++
++    /* Forcibly clear the data-transfer instigating command pool from the
++     * Response API.
++     */
++    pr_response_set_pool(session.pool);
+   }
+ 
+   if (true_abort) {
+@@ -991,6 +996,7 @@ int pr_data_xfer(char *cl_buf, size_t cl
+     res = pr_cmd_read(&cmd);
+     if (res < 0) {
+       int xerrno;
++
+ #if defined(ECONNABORTED)
+       xerrno = ECONNABORTED;
+ #elif defined(ENOTCONN)
+@@ -1058,8 +1064,8 @@ int pr_data_xfer(char *cl_buf, size_t cl
+ 
+         pr_response_flush(&resp_err_list);
+ 
+-        destroy_pool(cmd->pool);
+         pr_response_set_pool(resp_pool);
++        destroy_pool(cmd->pool);
+ 
+       /* We don't want to actually dispatch the NOOP command, since that
+        * would overwrite the scoreboard with the NOOP state; admins probably
+@@ -1084,13 +1090,14 @@ int pr_data_xfer(char *cl_buf, size_t cl
+ 
+         pr_response_flush(&resp_list);
+ 
+-        destroy_pool(cmd->pool);
+         pr_response_set_pool(resp_pool);
++        destroy_pool(cmd->pool);
+ 
+       } else {
+         char *title_buf = NULL;
+-        int title_len = -1;
+-        const char *sce_cmd = NULL, *sce_cmd_arg = NULL;
++        int curr_cmd_id = 0, title_len = -1;
++        const char *curr_cmd = NULL, *sce_cmd = NULL, *sce_cmd_arg = NULL;
++        cmd_rec *curr_cmd_rec = NULL;
+ 
+         pr_trace_msg(trace_channel, 5,
+           "client sent '%s' command during data transfer, dispatching",
+@@ -1102,6 +1109,9 @@ int pr_data_xfer(char *cl_buf, size_t cl
+           pr_proctitle_get(title_buf, title_len + 1); 
+         }
+ 
++        curr_cmd = session.curr_cmd;
++        curr_cmd_id = session.curr_cmd_id;
++        curr_cmd_rec = session.curr_cmd_rec;
+         sce_cmd = pr_scoreboard_entry_get(PR_SCORE_CMD);
+         sce_cmd_arg = pr_scoreboard_entry_get(PR_SCORE_CMD_ARG);
+ 
+@@ -1117,6 +1127,9 @@ int pr_data_xfer(char *cl_buf, size_t cl
+         }
+ 
+         destroy_pool(cmd->pool);
++        session.curr_cmd = curr_cmd;
++        session.curr_cmd_id = curr_cmd_id;
++        session.curr_cmd_rec = curr_cmd_rec;
+       }
+ 
+     } else {
+--- src/main.c
++++ src/main.c
+@@ -847,7 +847,7 @@ static void cmd_loop(server_rec *server,
+       pr_timer_reset(PR_TIMER_IDLE, ANY_MODULE);
+     }
+ 
+-    if (cmd) {
++    if (cmd != NULL) {
+ 
+       /* Detect known commands for other protocols; if found, drop the
+        * connection, lest we be used as part of an attack on a different
+@@ -864,6 +864,9 @@ static void cmd_loop(server_rec *server,
+  
+       pr_cmd_dispatch(cmd);
+       destroy_pool(cmd->pool);
++      session.curr_cmd = NULL;
++      session.curr_cmd_id = 0;
++      session.curr_cmd_rec = NULL;
+ 
+     } else {
+       pr_event_generate("core.invalid-command", NULL);
+--- src/response.c
++++ src/response.c
+@@ -212,6 +212,16 @@ void pr_response_add_err(const char *num
+   pr_response_t *resp = NULL, **head = NULL;
+   va_list msg;
+ 
++  if (fmt == NULL) {
++    return;
++  }
++
++  if (resp_pool == NULL) {
++    pr_trace_msg(trace_channel, 1,
++      "no response pool set, ignoring added %s error response", numeric);
++    return;
++  }
++
+   va_start(msg, fmt);
+   vsnprintf(resp_buf, sizeof(resp_buf), fmt, msg);
+   va_end(msg);
+@@ -257,6 +267,16 @@ void pr_response_add(const char *numeric
+   pr_response_t *resp = NULL, **head = NULL;
+   va_list msg;
+ 
++  if (fmt == NULL) {
++    return;
++  }
++
++  if (resp_pool == NULL) {
++    pr_trace_msg(trace_channel, 1,
++      "no response pool set, ignoring added %s response", numeric);
++    return;
++  }
++
+   va_start(msg, fmt);
+   vsnprintf(resp_buf, sizeof(resp_buf), fmt, msg);
+   va_end(msg);
+--- tests/api/response.c
++++ tests/api/response.c
+@@ -65,6 +65,11 @@ START_TEST (response_add_test) {
+   char *last_resp_code = NULL, *last_resp_msg = NULL;
+   char *resp_code = R_200, *resp_msg = "OK";
+ 
++  pr_response_set_pool(NULL);
++
++  mark_point();
++  pr_response_add(resp_code, "%s", resp_msg);
++
+   pr_response_set_pool(p);
+   pr_response_add(resp_code, "%s", resp_msg);
+ 
+@@ -87,6 +92,11 @@ START_TEST (response_add_err_test) {
+   char *last_resp_code = NULL, *last_resp_msg = NULL;
+   char *resp_code = R_450, *resp_msg = "Busy";
+ 
++  pr_response_set_pool(NULL);
++
++  mark_point();
++  pr_response_add(resp_code, "%s", resp_msg);
++
+   pr_response_set_pool(p);
+   pr_response_add_err(resp_code, "%s", resp_msg);
+ 

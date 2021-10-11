@@ -1,0 +1,14 @@
+//devcontainer.json
+{
+    "name": "rpmbuild devcontainer",
+    "dockerFile": "Dockerfile",
+    "settings": {
+        "terminal.integrated.automationShell.linux": "/bin/bash"
+    },
+    "extensions": [
+        "LaurentTreguier.rpm-spec"
+    ],
+    "forwardPorts": [],
+    "postCreateCommand": "sudo yum-builddep -y proftpd; echo '%_topdir ${containerWorkspaceFolder}' >> ~/.rpmmacros",
+    "remoteUser": "mockbuild"
+}

@@ -1,0 +1,40 @@
+--- contrib/ftpasswd
++++ contrib/ftpasswd
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ # ---------------------------------------------------------------------------
+ # Copyright (C) 2000-2013 TJ Saunders <tj@castaglia.org>
+ #
+--- contrib/ftpmail
++++ contrib/ftpmail
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ # ---------------------------------------------------------------------------
+ # Copyright (C) 2008-2013 TJ Saunders <tj@castaglia.org>
+ #
+--- contrib/ftpquota
++++ contrib/ftpquota
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ # -------------------------------------------------------------------------
+ # Copyright (C) 2000-2013 TJ Saunders <tj@castaglia.org>
+ #
+--- contrib/xferstats.holger-preiss
++++ contrib/xferstats.holger-preiss
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ # ---------------------------------------------------------------------------
+ #
+ # USAGE: xferstats <options>
+--- src/prxs.in
++++ src/prxs.in
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ 
+ # ---------------------------------------------------------------------------
+ # Copyright (C) 2008-2012 TJ Saunders <tj@castaglia.org>

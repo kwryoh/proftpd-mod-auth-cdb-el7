@@ -1,0 +1,101 @@
+From f2b7c3c6bc47ba547863a66d558dae7b9ed0ce63 Mon Sep 17 00:00:00 2001
+From: TJ Saunders <tj@castaglia.org>
+Date: Sun, 13 Jan 2013 16:43:07 -0800
+Subject: [PATCH] Add use of the new pr_fsio_set_use_mkdtemp() API, to work
+ around issues seen with mod_vroot due to the fix for
+ Bug#3841.
+
+---
+ mod_vroot.c |   35 ++++++++++++++++++++++++++++++++---
+ 1 file changed, 32 insertions(+), 3 deletions(-)
+
+diff --git mod_vroot/mod_vroot.c mod_vroot/mod_vroot.c
+index e31f11d..2fba410 100644
+--- contrib/mod_vroot.c
++++ contrib/mod_vroot.c
+@@ -53,6 +53,8 @@
+ static pool *vroot_dir_pool = NULL;
+ static pr_table_t *vroot_dirtab = NULL;
+ 
++static int vroot_use_mkdtemp = FALSE;
++
+ static unsigned int vroot_opts = 0;
+ #define	VROOT_OPT_ALLOW_SYMLINKS	0x0001
+ 
+@@ -777,6 +779,28 @@
+   return res;
+ }
+ 
++static int vroot_lchown(pr_fs_t *fs, const char *path, uid_t uid, gid_t gid) {
++  int res;
++  char vpath[PR_TUNABLE_PATH_MAX + 1];
++
++  if (session.curr_phase == LOG_CMD ||
++      session.curr_phase == LOG_CMD_ERR ||
++      (session.sf_flags & SF_ABORT) ||
++      *vroot_base == '\0') {
++    /* NOTE: once stackable FS modules are supported, have this fall through
++     * to the next module in the stack.
++     */
++    res = lchown(path, uid, gid);
++    return res;
++  }
++
++  if (vroot_lookup_path(NULL, vpath, sizeof(vpath)-1, path, 0, NULL) < 0)
++    return -1;
++
++  res = lchown(vpath, uid, gid);
++  return res;
++}
++
+ static int vroot_chroot(pr_fs_t *fs, const char *path) {
+   char *chroot_path = "/", *tmp = NULL;
+   config_rec *c;
+@@ -1390,6 +1414,26 @@
+ /* Command handlers
+  */
+ 
++MODRET vroot_pre_mkd(cmd_rec *cmd) {
++  if (vroot_engine == FALSE ||
++      session.chroot_path == NULL) {
++    return PR_DECLINED(cmd);
++  }
++
++  vroot_use_mkdtemp = pr_fsio_set_use_mkdtemp(FALSE);
++  return PR_DECLINED(cmd);
++}
++
++MODRET vroot_post_mkd(cmd_rec *cmd) {
++  if (vroot_engine == FALSE ||
++      session.chroot_path == NULL) {
++    return PR_DECLINED(cmd);
++  }
++
++  pr_fsio_set_use_mkdtemp(vroot_use_mkdtemp);
++  return PR_DECLINED(cmd);
++}
++
+ MODRET vroot_pre_pass(cmd_rec *cmd) {
+   pr_fs_t *fs = NULL;
+   unsigned char *use_vroot = NULL;
+@@ -1433,6 +1477,7 @@
+   fs->truncate = vroot_truncate;
+   fs->chmod = vroot_chmod;
+   fs->chown = vroot_chown;
++  fs->lchown = vroot_lchown;
+   fs->chdir = vroot_chdir;
+   fs->chroot = vroot_chroot;
+   fs->opendir = vroot_opendir;
+@@ -1564,6 +1609,12 @@
+   { PRE_CMD,		C_PASS,	G_NONE,	vroot_pre_pass, FALSE, FALSE },
+   { POST_CMD,		C_PASS,	G_NONE,	vroot_post_pass, FALSE, FALSE },
+   { POST_CMD_ERR,	C_PASS,	G_NONE,	vroot_post_pass_err, FALSE, FALSE },
++  { PRE_CMD,		C_MKD,	G_NONE,	vroot_pre_mkd, FALSE, FALSE },
++  { POST_CMD,		C_MKD,	G_NONE,	vroot_post_mkd, FALSE, FALSE },
++  { POST_CMD_ERR,	C_MKD,	G_NONE,	vroot_post_mkd, FALSE, FALSE },
++  { PRE_CMD,		C_XMKD,	G_NONE,	vroot_pre_mkd, FALSE, FALSE },
++  { POST_CMD,		C_XMKD,	G_NONE,	vroot_post_mkd, FALSE, FALSE },
++  { POST_CMD_ERR,	C_XMKD,	G_NONE,	vroot_post_mkd, FALSE, FALSE },
+   { 0, NULL }
+ };
+ 
