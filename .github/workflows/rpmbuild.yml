@@ -2,6 +2,8 @@ name: Create RPM Release
 
 on:
   push:
+    tags:
+      - "v*"
 
 jobs:
   build:
