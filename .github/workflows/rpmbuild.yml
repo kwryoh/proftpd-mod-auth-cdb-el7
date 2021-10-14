@@ -29,7 +29,7 @@ jobs:
         id: rpm_build
         uses: naveenrajm7/rpmbuild@master
         with:
-          spec_file: "SPECS/proftpd.spec"
+          spec_file: "proftpd.spec"
 
       - name: Upload Release Asset
         id: upload-release-asset

@@ -9,7 +9,7 @@
             "command": "rpmbuild",
             "args": [
                 "-ba",
-                "SPECS/proftpd.spec"
+                "proftpd.spec"
             ],
             "group": {
                 "kind": "build",
@@ -32,7 +32,7 @@
             "args": [
                 "-ba",
                 "--noclean",
-                "SPECS/proftpd.spec"
+                "proftpd.spec"
             ],
             "group": "build",
             "presentation": {
@@ -51,7 +51,7 @@
             "command": "rpmbuild",
             "args": [
                 "-bp",
-                "SPECS/proftpd.spec"
+                "proftpd.spec"
             ],
             "presentation": {
                 "echo": true,
@@ -68,7 +68,7 @@
             "type": "shell",
             "command": "rpmlint",
             "args": [
-                "SPECS/proftpd.spec"
+                "proftpd.spec"
             ],
             "group": {
                 "kind": "test",
