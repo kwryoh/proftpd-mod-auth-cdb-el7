@@ -10,6 +10,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Build RPM package
+        id: rpm_build
+        uses: naveenrajm7/rpmbuild@master
+        with:
+          spec_file: "proftpd.spec"
+
       - name: Create Release
         id: create_release
         uses: actions/create-release@latest
@@ -24,12 +30,6 @@ jobs:
             - Upload Source RPM
           draft: false
           prerelease: false
-
-      - name: Build RPM package
-        id: rpm_build
-        uses: naveenrajm7/rpmbuild@master
-        with:
-          spec_file: "proftpd.spec"
 
       - name: Upload Release Asset
         id: upload-release-asset
