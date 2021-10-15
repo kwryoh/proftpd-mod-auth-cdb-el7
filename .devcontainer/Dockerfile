@@ -43,4 +43,5 @@ VOLUME [${CCACHE_DIR}]
 RUN echo "source scl_source enable rh-git227" >> ~/.bash_profile
 
 # rpmbuild用初期設定を追加
-RUN rpmdev-setuptree
+RUN rpmdev-setuptree \
+    && echo '%debug_package %{nil}' >> ~/.rpmmacros
