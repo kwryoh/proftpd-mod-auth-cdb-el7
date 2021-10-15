@@ -8,6 +8,10 @@
     "extensions": [
         "LaurentTreguier.rpm-spec"
     ],
+    "mounts": [
+        "type=bind,source=${localEnv:HOME}/.ssh,target=/home/mockbuild/.ssh,readonly=true",
+        "type=bind,source=${localEnv:HOME}/.local,target=/home/mockbuild/.local,readonly=true"
+    ],
     "forwardPorts": [],
     "postCreateCommand": "sudo yum-builddep -y ../SPECS/profptd.spec; echo '%_topdir ${containerWorkspaceFolder}' >> ~/.rpmmacros",
     "remoteUser": "mockbuild"
