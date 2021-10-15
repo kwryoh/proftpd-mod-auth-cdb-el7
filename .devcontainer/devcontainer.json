@@ -9,6 +9,6 @@
         "LaurentTreguier.rpm-spec"
     ],
     "forwardPorts": [],
-    "postCreateCommand": "sudo yum-builddep -y proftpd; echo '%_topdir ${containerWorkspaceFolder}' >> ~/.rpmmacros",
+    "postCreateCommand": "sudo yum-builddep -y ../SPECS/profptd.spec; echo '%_topdir ${containerWorkspaceFolder}' >> ~/.rpmmacros",
     "remoteUser": "mockbuild"
 }

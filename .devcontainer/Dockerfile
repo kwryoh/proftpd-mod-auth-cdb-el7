@@ -10,6 +10,7 @@ ARG CCACHE_DIR=/home/${USRNAME}/.ccache
 #----------------------
 RUN yum install -y epel-release centos-release-scl
 RUN yum install -y \
+        deltarpm \
         automake autoconf \
         ccache \
         git rh-git227-git \
