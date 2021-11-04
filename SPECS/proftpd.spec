@@ -72,6 +72,7 @@ Patch11:		proftpd-1.3.5e-bug4385.patch
 Patch12:		proftpd-1.3.5e-issue-1043.patch
 Patch27:		proftpd-mod-vroot-0.9.2-bug3841.patch
 Patch28:		https://github.com/proftpd/proftpd/commit/e7c0b6e7.patch
+Patch100:   mod_auth_cdb_long-type-bug.patch
 
 BuildRequires:		coreutils
 BuildRequires:		gcc
@@ -323,6 +324,9 @@ sed -i -e '/killall/s/test.*/systemctl reload proftpd.service/' \
 # https://github.com/proftpd/proftpd/pull/1044
 # https://bugzilla.redhat.com/show_bug.cgi?id=1878869
 %patch12
+
+# Fix unmatch cdb search. 64bit key length to 32bit.
+%patch100
 
 # Avoid docfile dependencies
 chmod -x contrib/xferstats.holger-preiss
